@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from openai import OpenAI
 import plotly.express as px
-import plotly.graph_objects as go
 
 # 1. 페이지 기본 설정
 st.set_page_config(
@@ -15,35 +14,23 @@ st.set_page_config(
 # 2. 모던 스타일 CSS 적용
 st.markdown("""
     <style>
-    /* 메인 배경 및 폰트 세팅 */
     .main {
         background-color: #f8f9fa;
     }
-    
-    /* 카드 스타일 카드 컨테이너 */
-    .css-card {
-        background-color: #ffffff;
-        padding: 24px;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        margin-bottom: 20px;
-        border: 1px solid #e9ecef;
-    }
-
-    /* 메트릭 카드 스타일 */
     .metric-container {
         display: flex;
         justify-content: space-between;
         gap: 10px;
-        margin-bottom: 15px;
+        margin-bottom: 20px;
     }
     .metric-card {
-        background: #f1f3f5;
-        padding: 16px;
-        border-radius: 10px;
+        background: #ffffff;
+        padding: 18px;
+        border-radius: 12px;
         text-align: center;
         flex: 1;
         border: 1px solid #e9ecef;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
     .metric-label {
         font-size: 0.85rem;
@@ -52,7 +39,7 @@ st.markdown("""
         font-weight: 600;
     }
     .metric-value {
-        font-size: 1.3rem;
+        font-size: 1.35rem;
         font-weight: 700;
         color: #1971c2;
     }
@@ -118,168 +105,166 @@ if "sel_category" not in st.session_state:
 if "sel_group" not in st.session_state:
     st.session_state["sel_group"] = "국어"
 
+if "ai_report" not in st.session_state:
+    st.session_state["ai_report"] = ""
+
+if "chat_messages" not in st.session_state:
+    st.session_state["chat_messages"] = []
+
 def on_category_change():
     category = st.session_state["sel_category"]
     available_groups = list(SUBJECTS_DB[category].keys())
     st.session_state["sel_group"] = available_groups[0]
 
 # ---------------------------------------------------------
-# 3. 레이아웃 2분할 (좌측: 입력 / 우측: 분석 및 AI 결과)
+# 상단 탭 구성 (성적 입력 / 분석 및 AI 리포트)
 # ---------------------------------------------------------
-left_col, right_col = st.columns([1, 1], gap="large")
+tab_input, tab_analysis = st.tabs(["📝 1. 성적 입력", "📊 2. 환산 분석 및 AI 리포트"])
+
 
 # =========================================================
-# [LEFT COLUMN] 성적 및 기본 정보 입력 영역
+# TAB 1: 성적 및 학생 정보 입력
 # =========================================================
-with left_col:
-    st.subheader("📋 성적 및 학생 정보 입력")
-    
-    # 기본 설정 섹션
-    with st.expander("⚙️ 학생 정보 및 목표 설정", expanded=True):
+with tab_input:
+    col1, col2 = st.columns([1, 1], gap="large")
+
+    with col1:
+        st.subheader("⚙️ 학생 정보 및 목표 설정")
         student_type = st.radio(
             "현재 학생 신분",
             ["고등학교 재학생", "자퇴생 / 검정고시 준비생"],
             index=0,
-            horizontal=True
+            horizontal=True,
+            key="student_type"
         )
         target_univ = st.text_input(
             "목표 대학 및 학과",
-            value="연세대학교 컴퓨터공학과"
+            value="연세대학교 컴퓨터공학과",
+            key="target_univ"
         )
         user_context = st.text_area(
             "추가 제출 상황 (선택)",
             placeholder="예: 공학 계열 희망 / 과학 융합선택 과목 위주 수강 중",
-            height=80
+            height=80,
+            key="user_context"
         )
 
-    # 성적 입력 섹션
-    st.markdown("#### ➕ 과목 성적 추가")
-    
-    f_col0, f_col1, f_col2 = st.columns([1.2, 1, 1])
-    with f_col0:
-        semester = st.selectbox(
-            "학기 선택",
-            options=SEMESTERS,
-            key="sel_semester"
-        )
-    with f_col1:
-        category = st.selectbox(
-            "교과 구분",
-            options=list(SUBJECTS_DB.keys()),
-            key="sel_category",
-            on_change=on_category_change
-        )
-    with f_col2:
-        group_options = list(SUBJECTS_DB[category].keys())
-        group = st.selectbox(
-            "교과군",
-            options=group_options,
-            key="sel_group"
-        )
-
-    f_col3, f_col4 = st.columns([3, 2])
-    with f_col3:
-        subject_options = SUBJECTS_DB[category][group]
-        subject_name = st.selectbox(
-            "과목 선택 (22개정)",
-            options=subject_options,
-            key="sel_subject_name"
-        )
-    with f_col4:
-        unit = st.number_input("단위수(학점)", min_value=1, max_value=8, value=4, step=1, key="sel_unit")
-
-    s_col1, s_col2, s_col3, s_col4 = st.columns(4)
-    with s_col1:
-        grade = st.number_input("석차등급", min_value=1.0, max_value=5.0, value=2.0, step=0.1, format="%.1f")
-    with s_col2:
-        raw_score = st.number_input("원점수", min_value=0, max_value=100, value=90, step=1)
-    with s_col3:
-        students_count = st.number_input("수강자수", min_value=1, value=180, step=1)
-    with s_col4:
-        achievement = st.selectbox("성취도", ["A", "B", "C", "D", "E"], index=0)
-
-    st.caption("성취도별 분포비율 (%)")
-    d_col1, d_col2, d_col3, d_col4, d_col5 = st.columns(5)
-    with d_col1:
-        dist_a = st.number_input("A (%)", min_value=0.0, max_value=100.0, value=20.0, step=1.0, format="%.1f")
-    with d_col2:
-        dist_b = st.number_input("B (%)", min_value=0.0, max_value=100.0, value=30.0, step=1.0, format="%.1f")
-    with d_col3:
-        dist_c = st.number_input("C (%)", min_value=0.0, max_value=100.0, value=30.0, step=1.0, format="%.1f")
-    with d_col4:
-        dist_d = st.number_input("D (%)", min_value=0.0, max_value=100.0, value=10.0, step=1.0, format="%.1f")
-    with d_col5:
-        dist_e = st.number_input("E (%)", min_value=0.0, max_value=100.0, value=10.0, step=1.0, format="%.1f")
-
-    if st.button("➕ 과목 성적 추가", type="primary", use_container_width=True):
-        dist_ratio_str = f"A:{dist_a:.1f}%, B:{dist_b:.1f}%, C:{dist_c:.1f}%, D:{dist_d:.1f}%, E:{dist_e:.1f}%"
-        new_item = {
-            "학기": semester,
-            "교과구분": category,
-            "교과군": group,
-            "과목명": subject_name,
-            "단위수(학점)": unit,
-            "석차등급(1~5)": float(grade),
-            "원점수": int(raw_score),
-            "수강자수": int(students_count),
-            "성취도": achievement,
-            "A비율(%)": float(dist_a),
-            "B비율(%)": float(dist_b),
-            "C비율(%)": float(dist_c),
-            "D비율(%)": float(dist_d),
-            "E비율(%)": float(dist_e),
-            "성취도 분포비율": dist_ratio_str
-        }
-        st.session_state["subjects_data"].append(new_item)
-        st.success(f"[{semester}] '{subject_name}' 과목이 추가되었습니다.")
-        st.rerun()
-
-    st.markdown("---")
-    st.markdown("#### 📝 등록된 과목 목록")
-    df_current = pd.DataFrame(st.session_state["subjects_data"])
-
-    column_config = {
-        "학기": st.column_config.SelectboxColumn("학기", options=SEMESTERS, required=True),
-        "교과구분": st.column_config.SelectboxColumn("구분", options=list(SUBJECTS_DB.keys()), required=True),
-        "교과군": st.column_config.TextColumn("교과군", required=True),
-        "과목명": st.column_config.TextColumn("과목명", required=True),
-        "단위수(학점)": st.column_config.NumberColumn("학점", min_value=1, max_value=8, step=1, required=True),
-        "석차등급(1~5)": st.column_config.NumberColumn("등급", min_value=1.0, max_value=5.0, step=0.1, required=True),
-        "원점수": st.column_config.NumberColumn("원점수", min_value=0, max_value=100, step=1, required=True),
-        "성취도": st.column_config.SelectboxColumn("성취도", options=["A", "B", "C", "D", "E"], required=True),
-    }
-
-    edited_df = st.data_editor(
-        df_current,
-        column_config=column_config,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="editable_subject_table"
-    )
-
-    if not edited_df.empty:
-        for idx, row in edited_df.iterrows():
-            edited_df.at[idx, "성취도 분포비율"] = (
-                f"A:{row['A비율(%)']:.1f}%, B:{row['B비율(%)']:.1f}%, C:{row['C비율(%)']:.1f}%, D:{row['D비율(%)']:.1f}%, E:{row['E비율(%)']:.1f}%"
+        st.markdown("---")
+        st.subheader("➕ 과목 성적 추가")
+        
+        f_col0, f_col1, f_col2 = st.columns([1.2, 1, 1])
+        with f_col0:
+            semester = st.selectbox("학기 선택", options=SEMESTERS, key="sel_semester")
+        with f_col1:
+            category = st.selectbox(
+                "교과 구분",
+                options=list(SUBJECTS_DB.keys()),
+                key="sel_category",
+                on_change=on_category_change
             )
-    st.session_state["subjects_data"] = edited_df.to_dict("records")
+        with f_col2:
+            group_options = list(SUBJECTS_DB[category].keys())
+            group = st.selectbox("교과군", options=group_options, key="sel_group")
+
+        f_col3, f_col4 = st.columns([3, 2])
+        with f_col3:
+            subject_options = SUBJECTS_DB[category][group]
+            subject_name = st.selectbox("과목 선택 (22개정)", options=subject_options, key="sel_subject_name")
+        with f_col4:
+            unit = st.number_input("단위수(학점)", min_value=1, max_value=8, value=4, step=1, key="sel_unit")
+
+        s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+        with s_col1:
+            grade = st.number_input("석차등급", min_value=1.0, max_value=5.0, value=2.0, step=0.1, format="%.1f")
+        with s_col2:
+            raw_score = st.number_input("원점수", min_value=0, max_value=100, value=90, step=1)
+        with s_col3:
+            students_count = st.number_input("수강자수", min_value=1, value=180, step=1)
+        with s_col4:
+            achievement = st.selectbox("성취도", ["A", "B", "C", "D", "E"], index=0)
+
+        st.caption("성취도별 분포비율 (%)")
+        d_col1, d_col2, d_col3, d_col4, d_col5 = st.columns(5)
+        with d_col1:
+            dist_a = st.number_input("A (%)", min_value=0.0, max_value=100.0, value=20.0, step=1.0, format="%.1f")
+        with d_col2:
+            dist_b = st.number_input("B (%)", min_value=0.0, max_value=100.0, value=30.0, step=1.0, format="%.1f")
+        with d_col3:
+            dist_c = st.number_input("C (%)", min_value=0.0, max_value=100.0, value=30.0, step=1.0, format="%.1f")
+        with d_col4:
+            dist_d = st.number_input("D (%)", min_value=0.0, max_value=100.0, value=10.0, step=1.0, format="%.1f")
+        with d_col5:
+            dist_e = st.number_input("E (%)", min_value=0.0, max_value=100.0, value=10.0, step=1.0, format="%.1f")
+
+        if st.button("➕ 과목 성적 추가", type="primary", use_container_width=True):
+            dist_ratio_str = f"A:{dist_a:.1f}%, B:{dist_b:.1f}%, C:{dist_c:.1f}%, D:{dist_d:.1f}%, E:{dist_e:.1f}%"
+            new_item = {
+                "학기": semester,
+                "교과구분": category,
+                "교과군": group,
+                "과목명": subject_name,
+                "단위수(학점)": unit,
+                "석차등급(1~5)": float(grade),
+                "원점수": int(raw_score),
+                "수강자수": int(students_count),
+                "성취도": achievement,
+                "A비율(%)": float(dist_a),
+                "B비율(%)": float(dist_b),
+                "C비율(%)": float(dist_c),
+                "D비율(%)": float(dist_d),
+                "E비율(%)": float(dist_e),
+                "성취도 분포비율": dist_ratio_str
+            }
+            st.session_state["subjects_data"].append(new_item)
+            st.success(f"[{semester}] '{subject_name}' 과목이 추가되었습니다.")
+            st.rerun()
+
+    with col2:
+        st.subheader("📋 등록된 과목 목록")
+        df_current = pd.DataFrame(st.session_state["subjects_data"])
+
+        column_config = {
+            "학기": st.column_config.SelectboxColumn("학기", options=SEMESTERS, required=True),
+            "교과구분": st.column_config.SelectboxColumn("구분", options=list(SUBJECTS_DB.keys()), required=True),
+            "교과군": st.column_config.TextColumn("교과군", required=True),
+            "과목명": st.column_config.TextColumn("과목명", required=True),
+            "단위수(학점)": st.column_config.NumberColumn("학점", min_value=1, max_value=8, step=1, required=True),
+            "석차등급(1~5)": st.column_config.NumberColumn("등급", min_value=1.0, max_value=5.0, step=0.1, required=True),
+            "원점수": st.column_config.NumberColumn("원점수", min_value=0, max_value=100, step=1, required=True),
+            "성취도": st.column_config.SelectboxColumn("성취도", options=["A", "B", "C", "D", "E"], required=True),
+        }
+
+        edited_df = st.data_editor(
+            df_current,
+            column_config=column_config,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="editable_subject_table"
+        )
+
+        if not edited_df.empty:
+            for idx, row in edited_df.iterrows():
+                edited_df.at[idx, "성취도 분포비율"] = (
+                    f"A:{row['A비율(%)']:.1f}%, B:{row['B비율(%)']:.1f}%, C:{row['C비율(%)']:.1f}%, D:{row['D비율(%)']:.1f}%, E:{row['E비율(%)']:.1f}%"
+                )
+        st.session_state["subjects_data"] = edited_df.to_dict("records")
 
 
 # =========================================================
-# [RIGHT COLUMN] 성적 환산 통계 및 AI 컨설팅 리포트 영역
+# TAB 2: 환산 분석 및 AI 리포트 & 질의응답
 # =========================================================
-with right_col:
-    st.subheader("📊 환산 결과 및 AI 진학 컨설팅")
+with tab_analysis:
+    df_analysis = pd.DataFrame(st.session_state["subjects_data"])
 
-    if edited_df.empty or edited_df["단위수(학점)"].sum() == 0:
-        st.info("👈 좌측에서 성적 정보를 입력하시면 실시간 환산 결과와 AI 분석을 확인하실 수 있습니다.")
+    if df_analysis.empty or df_analysis["단위수(학점)"].sum() == 0:
+        st.info("👈 먼저 **'1. 성적 입력'** 탭에서 성적 정보를 입력해주세요.")
     else:
         # 1. 누적 전체 성적 계산
-        total_units = int(edited_df["단위수(학점)"].sum())
-        weighted_grade_sum = (edited_df["석차등급(1~5)"] * edited_df["단위수(학점)"]).sum()
+        total_units = int(df_analysis["단위수(학점)"].sum())
+        weighted_grade_sum = (df_analysis["석차등급(1~5)"] * df_analysis["단위수(학점)"]).sum()
         avg_5grade = weighted_grade_sum / total_units
 
-        weighted_score_sum = (edited_df["원점수"] * edited_df["단위수(학점)"]).sum()
+        weighted_score_sum = (df_analysis["원점수"] * df_analysis["단위수(학점)"]).sum()
         avg_raw_score = weighted_score_sum / total_units
 
         x_5scale = [1.0, 1.5, 2.5, 3.5, 4.5, 5.0]
@@ -289,7 +274,7 @@ with right_col:
         estimated_9grade = float(np.interp(avg_5grade, x_5scale, y_9scale))
         estimated_pct = float(np.interp(avg_5grade, x_5scale, pct_scale))
 
-        # 메트릭 카드 UI 시각화
+        # 메트릭 카드 UI
         st.markdown(f"""
         <div class="metric-container">
             <div class="metric-card">
@@ -314,144 +299,125 @@ with right_col:
         st.markdown("---")
 
         # ---------------------------------------------------------
-        # 학기별 Radio 선택 & 알록달록 교과군 분석 막대그래프
+        # 시각화 그래프 2종 (좌우 2분할)
         # ---------------------------------------------------------
-        st.markdown("### 📊 학기별 교과군 분석 그래프")
-        
-        selected_sem = st.radio(
-            "분석할 학기를 선택하세요",
-            options=["전체"] + SEMESTERS,
-            horizontal=True,
-            key="radio_sem_analysis"
-        )
+        g_col1, g_col2 = st.columns(2, gap="large")
 
-        # 필터링
-        if selected_sem == "전체":
-            filtered_df = edited_df.copy()
-        else:
-            filtered_df = edited_df[edited_df["학기"] == selected_sem]
+        # [좌측] 학기별 교과군 분석 막대그래프
+        with g_col1:
+            st.markdown("##### 📊 학기별 교과군 분석")
+            selected_sem = st.radio(
+                "학기 선택",
+                options=["전체"] + SEMESTERS,
+                horizontal=True,
+                key="radio_sem_analysis"
+            )
 
-        if filtered_df.empty:
-            st.warning(f"'{selected_sem}'에 입력된 과목 데이터가 없습니다.")
-        else:
-            # 교과군별 평균 등급 계산
-            grp_data = []
-            for grp, group_df in filtered_df.groupby("교과군"):
-                g_units = group_df["단위수(학점)"].sum()
-                if g_units > 0:
-                    g_avg = (group_df["석차등급(1~5)"] * group_df["단위수(학점)"]).sum() / g_units
-                    grp_data.append({"교과군": grp, "평균등급": round(g_avg, 2), "이수학점": int(g_units)})
-            
-            df_grp = pd.DataFrame(grp_data)
+            filtered_df = df_analysis if selected_sem == "전체" else df_analysis[df_analysis["학기"] == selected_sem]
 
-            if not df_grp.empty:
-                # 알록달록한 막대그래프 생성
-                fig_bar = px.bar(
-                    df_grp,
-                    x="교과군",
+            if filtered_df.empty:
+                st.warning(f"'{selected_sem}'에 입력된 데이터가 없습니다.")
+            else:
+                grp_data = []
+                for grp, group_df in filtered_df.groupby("교과군"):
+                    g_units = group_df["단위수(학점)"].sum()
+                    if g_units > 0:
+                        g_avg = (group_df["석차등급(1~5)"] * group_df["단위수(학점)"]).sum() / g_units
+                        grp_data.append({"교과군": grp, "평균등급": round(g_avg, 2), "이수학점": int(g_units)})
+                
+                df_grp = pd.DataFrame(grp_data)
+
+                if not df_grp.empty:
+                    fig_bar = px.bar(
+                        df_grp,
+                        x="교과군",
+                        y="평균등급",
+                        color="교과군",
+                        text="평균등급",
+                        title=f"<b>[{selected_sem}] 교과군별 평균 등급</b>",
+                        color_discrete_sequence=px.colors.qualitative.Pastel
+                    )
+                    fig_bar.update_traces(
+                        texttemplate='%{text:.2f}등급',
+                        textposition='outside',
+                        hovertemplate='<b>%{x}</b><br>평균 등급: %{y:.2f}등급<br>이수 학점: %{customdata[0]}학점<extra></extra>',
+                        customdata=df_grp[["이수학점"]]
+                    )
+                    fig_bar.update_layout(
+                        xaxis=dict(title="교과군", side="bottom"), # X축 아래쪽 밀착
+                        yaxis=dict(autorange="reversed", range=[5.5, 0.5], title="평균 등급"),
+                        height=350,
+                        margin=dict(l=10, r=10, t=40, b=10),
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
+        # [우측] 학기별 성적 변화 추이 꺾은선 그래프
+        with g_col2:
+            st.markdown("##### 📈 학기별 성적 추이")
+            trend_df = df_analysis.copy()
+            trend_df["학기"] = pd.Categorical(trend_df["학기"], categories=SEMESTERS, ordered=True)
+            trend_df = trend_df.sort_values("학기")
+
+            sem_trend = []
+            for sem_name, sem_group in trend_df.groupby("학기", observed=False):
+                s_units = sem_group["단위수(학점)"].sum()
+                if s_units > 0:
+                    s_avg = (sem_group["석차등급(1~5)"] * sem_group["단위수(학점)"]).sum() / s_units
+                    sem_trend.append({"학기": sem_name, "구분": "전체 평균", "평균등급": round(s_avg, 2)})
+                
+                for grp_name in ["국어", "수학", "영어", "한국사/사회", "과학"]:
+                    grp_sub = sem_group[sem_group["교과군"] == grp_name]
+                    g_units = grp_sub["단위수(학점)"].sum()
+                    if g_units > 0:
+                        g_avg = (grp_sub["석차등급(1~5)"] * grp_sub["단위수(학점)"]).sum() / g_units
+                        sem_trend.append({"학기": sem_name, "구분": grp_name, "평균등급": round(g_avg, 2)})
+
+            df_trend = pd.DataFrame(sem_trend)
+
+            if df_trend.empty:
+                st.info("성적 추이를 표시할 학기 데이터가 부족합니다.")
+            else:
+                fig_line = px.line(
+                    df_trend,
+                    x="학기",
                     y="평균등급",
-                    color="교과군",
-                    text="평균등급",
-                    title=f"<b>[{selected_sem}] 교과군별 평균 등급 (1등급에 가까울수록 우수)</b>",
-                    color_discrete_sequence=px.colors.qualitative.Pastel
+                    color="구분",
+                    markers=True,
+                    title="<b>학기 흐름에 따른 성적 변화</b>",
+                    color_discrete_map={
+                        "전체 평균": "#FF4B4B", "국어": "#6366F1", "수학": "#00C9A7",
+                        "영어": "#FFC75F", "한국사/사회": "#845EC2", "과학": "#FF9671"
+                    }
                 )
-                fig_bar.update_traces(
-                    texttemplate='%{text:.2f}등급',
-                    textposition='outside',
-                    hovertemplate='<b>%{x}</b><br>평균 등급: %{y:.2f}등급<br>이수 학점: %{customdata[0]}학점<extra></extra>',
-                    customdata=df_grp[["이수학점"]]
+                fig_line.update_traces(line=dict(width=3), marker=dict(size=7))
+                fig_line.update_layout(
+                    yaxis=dict(autorange="reversed", range=[5.5, 0.5], title="평균 등급"),
+                    xaxis_title="학기",
+                    height=380,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                 )
-                # X축을 아래쪽(side="bottom")에 고정하여 막대 그래프 아래에 밀착
-                fig_bar.update_layout(
-                    xaxis=dict(
-                        title="교과군",
-                        side="bottom"
-                    ),
-                    yaxis=dict(
-                        autorange="reversed", 
-                        range=[5.5, 0.5], 
-                        title="평균 등급 (낮을수록 좋음)"
-                    ),
-                    height=350,
-                    margin=dict(l=20, r=20, t=50, b=20),
-                    showlegend=False
-                )
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(fig_line, use_container_width=True)
 
         st.markdown("---")
 
         # ---------------------------------------------------------
-        # 학기별/교과군별 성적 변화 추이 꺾은선 그래프
+        # AI 분석 리포트 생성 섹션
         # ---------------------------------------------------------
-        st.markdown("### 📈 학기별 성적 변화 추이 그래프")
-
-        # 학기 순서대로 정렬하기 위해 Categorical 세팅
-        trend_df = edited_df.copy()
-        trend_df["학기"] = pd.Categorical(trend_df["학기"], categories=SEMESTERS, ordered=True)
-        trend_df = trend_df.sort_values("학기")
-
-        # 학기별 전체 평균 등급
-        sem_trend = []
-        for sem_name, sem_group in trend_df.groupby("학기", observed=False):
-            s_units = sem_group["단위수(학점)"].sum()
-            if s_units > 0:
-                s_avg = (sem_group["석차등급(1~5)"] * sem_group["단위수(학점)"]).sum() / s_units
-                sem_trend.append({"학기": sem_name, "구분": "전체 평균", "평균등급": round(s_avg, 2)})
-            
-            # 주요 교과군별 추이도 함께 계산
-            for grp_name in ["국어", "수학", "영어", "한국사/사회", "과학"]:
-                grp_sub = sem_group[sem_group["교과군"] == grp_name]
-                g_units = grp_sub["단위수(학점)"].sum()
-                if g_units > 0:
-                    g_avg = (grp_sub["석차등급(1~5)"] * grp_sub["단위수(학점)"]).sum() / g_units
-                    sem_trend.append({"학기": sem_name, "구분": grp_name, "평균등급": round(g_avg, 2)})
-
-        df_trend = pd.DataFrame(sem_trend)
-
-        if df_trend.empty:
-            st.info("성적 추이를 표시할 학기 데이터가 부족합니다.")
-        else:
-            fig_line = px.line(
-                df_trend,
-                x="학기",
-                y="평균등급",
-                color="구분",
-                markers=True,
-                title="<b>학기 흐름에 따른 성적 변화 (꺾은선)</b>",
-                color_discrete_map={
-                    "전체 평균": "#FF4B4B",
-                    "국어": "#6366F1",
-                    "수학": "#00C9A7",
-                    "영어": "#FFC75F",
-                    "한국사/사회": "#845EC2",
-                    "과학": "#FF9671"
-                }
-            )
-            fig_line.update_traces(line=dict(width=3), marker=dict(size=8))
-            fig_line.update_layout(
-                yaxis=dict(autorange="reversed", range=[5.5, 0.5], title="평균 등급"),
-                xaxis_title="학기",
-                height=380,
-                margin=dict(l=20, r=20, t=50, b=20),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-            )
-            st.plotly_chart(fig_line, use_container_width=True)
-
-        st.markdown("---")
-
-        # ---------------------------------------------------------
-        # AI 분석 리포트 생성 버튼
-        # ---------------------------------------------------------
-        if st.button("✨ Upstage Solar AI 2028 맞춤 분석 리포트 생성", type="primary", use_container_width=True):
+        st.subheader("🤖 Upstage Solar AI 2028 맞춤 분석 리포트")
+        
+        if st.button("✨ AI 분석 리포트 생성 / 다시 생성", type="primary", use_container_width=True):
             if not api_key:
                 st.error("⚠️ API 키가 설정되지 않았습니다.")
             else:
                 with st.spinner("Solar AI가 2028 모집요강 및 과목 이수 현황을 다각도로 분석 중입니다..."):
                     try:
-                        client = OpenAI(
-                            api_key=api_key,
-                            base_url="https://api.upstage.ai/v1/solar"
-                        )
+                        client = OpenAI(api_key=api_key, base_url="https://api.upstage.ai/v1/solar")
+
+                        student_type = st.session_state.get("student_type", "고등학교 재학생")
+                        target_univ = st.session_state.get("target_univ", "연세대학교 컴퓨터공학과")
+                        user_context = st.session_state.get("user_context", "")
 
                         if student_type == "고등학교 재학생":
                             type_guideline = """
@@ -468,7 +434,7 @@ with right_col:
                               3) 대학별 지원 자격 및 수능 최저학력기준 충족 전략
                             """
 
-                        subjects_summary_str = edited_df.to_string(index=False)
+                        subjects_summary_str = df_analysis.to_string(index=False)
 
                         prompt = f"""
                         너는 2028 대입 개편안 및 대한민국 주요 대학 모집요강 변화에 정통한 최상위 대입 전문 입시 컨설턴트야.
@@ -482,7 +448,7 @@ with right_col:
                         - 가중 평균 원점수: {avg_raw_score:.1f}점
                         - 학생 추가 설명: {user_context if user_context else '특별한 추가 설명 없음'}
 
-                        [상세 과목별 내신 성적표 (학기 포함)]
+                        [상세 과목별 내신 성적표]
                         {subjects_summary_str}
 
                         [신분별 맞춤 가이드라인]
@@ -505,10 +471,63 @@ with right_col:
                             temperature=0.7
                         )
 
-                        result_text = response.choices[0].message.content
-
-                        st.markdown("### 🤖 Solar AI 맞춤 컨설팅 리포트")
-                        st.markdown(result_text)
+                        st.session_state["ai_report"] = response.choices[0].message.content
+                        st.session_state["chat_messages"] = [] # 대화 내역 초기화
 
                     except Exception as e:
                         st.error(f"API 호출 중 오류가 발생했습니다: {e}")
+
+        # AI 리포트 출력
+        if st.session_state["ai_report"]:
+            st.markdown(st.session_state["ai_report"])
+
+            st.markdown("---")
+
+            # ---------------------------------------------------------
+            # 하단 AI 입시 컨설턴트 1:1 대화상자 (Q&A)
+            # ---------------------------------------------------------
+            st.subheader("💬 AI 입시 컨설턴트와 1:1 추가 질의응답")
+            st.caption("위 분석 리포트에 대해 궁금한 점이나 추가 입시 전략을 자유롭게 질문해 보세요!")
+
+            # 기존 메시지 표시
+            for message in st.session_state["chat_messages"]:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+
+            # 사용자 입력 박스
+            if user_query := st.chat_input("예: 수시 학생부종합전형에서 세특을 어떻게 채워야 할까요?"):
+                # 사용자 메시지 화면 출력 및 세션 저장
+                st.session_state["chat_messages"].append({"role": "user", "content": user_query})
+                with st.chat_message("user"):
+                    st.markdown(user_query)
+
+                # AI 답변 생성
+                with st.chat_message("assistant"):
+                    with st.spinner("답변을 작성하고 있습니다..."):
+                        try:
+                            client = OpenAI(api_key=api_key, base_url="https://api.upstage.ai/v1/solar")
+
+                            # 대화 컨텍스트 구성 (이전 분석 리포트 내용 포함)
+                            messages_payload = [
+                                {
+                                    "role": "system",
+                                    "content": f"너는 2028 대입 전문 컨설턴트야. 아래는 당신이 작성한 학생의 성적 분석 리포트이다:\n\n{st.session_state['ai_report']}\n\n이 분석 리포트 내용과 학생 성적을 바탕으로 질문에 친절하고 정밀하게 답변해라."
+                                }
+                            ]
+
+                            # 대화 내역 추가
+                            for msg in st.session_state["chat_messages"]:
+                                messages_payload.append({"role": msg["role"], "content": msg["content"]})
+
+                            response = client.chat.completions.create(
+                                model="solar-pro",
+                                messages=messages_payload,
+                                temperature=0.7
+                            )
+
+                            ai_answer = response.choices[0].message.content
+                            st.markdown(ai_answer)
+                            st.session_state["chat_messages"].append({"role": "assistant", "content": ai_answer})
+
+                        except Exception as e:
+                            st.error(f"답변 생성 중 오류가 발생했습니다: {e}")

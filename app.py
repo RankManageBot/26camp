@@ -605,14 +605,16 @@ with tab_report:
                         st.error(f"API 호출 중 오류가 발생했습니다: {e}")
 
         # AI 리포트가 생성되었을 때 인터랙티브 뷰어 출력
+        # AI 리포트가 생성되었을 때 인터랙티브 뷰어 출력
         if st.session_state["ai_report"]:
-            report_content = st.session_state["ai_report"]
-            rec_content = st.session_state.get("recommended_univs", "")
+            # 물결표(~)가 마크다운 취소선(~~)으로 해석되지 않도록 \~ 로 변환 (Escape)
+            report_content = st.session_state["ai_report"].replace("~", r"\~")
+            rec_content = st.session_state.get("recommended_univs", "").replace("~", r"\~")
 
-            # 리포트 다운로드 버튼
+            # 리포트 다운로드 버튼 (다운로드 파일용은 원본 그대로 저장)
             st.download_button(
                 label="📄 전체 AI 리포트 (.txt) 다운로드",
-                data=f"=== [지원 가능 대학/학과 추천] ===\n\n{rec_content}\n\n=== [종합 분석 리포트] ===\n\n{report_content}",
+                data=f"=== [지원 가능 대학/학과 추천] ===\n\n{st.session_state.get('recommended_univs', '')}\n\n=== [종합 분석 리포트] ===\n\n{st.session_state['ai_report']}",
                 file_name=f"{st.session_state.get('target_univ', '목표대학')}_2028_입시분석리포트.txt",
                 mime="text/plain",
                 use_container_width=True
@@ -621,7 +623,7 @@ with tab_report:
             st.write("")
 
             # ---------------------------------------------------------
-            # NEW: 지원 가능 대학/학과 추천 Expander (상단 배치)
+            # 1. 지원 가능 대학/학과 추천 Expander
             # ---------------------------------------------------------
             with st.expander("🏫 **[현재 성적 기반] 지원 가능 타 대학 / 유사 학과 추천**", expanded=True):
                 if rec_content:
@@ -629,7 +631,7 @@ with tab_report:
                 else:
                     st.info("리포트를 생성하면 지원 가능한 타 대학 및 유사 학과 추천 정보를 확인할 수 있습니다.")
 
-            # 📌 AI 종합 입시 분석 리포트 Expander
+            # 2. AI 종합 입시 분석 리포트 Expander
             with st.expander("📌 **AI 종합 입시 분석 리포트**", expanded=True):
                 st.markdown(report_content)
 

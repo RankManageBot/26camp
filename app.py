@@ -314,7 +314,7 @@ with right_col:
         st.markdown("---")
 
         # ---------------------------------------------------------
-        # [NEW 1] 학기별 Radio 선택 & 알록달록 교과군 분석 막대그래프
+        # 학기별 Radio 선택 & 알록달록 교과군 분석 막대그래프
         # ---------------------------------------------------------
         st.markdown("### 📊 학기별 교과군 분석 그래프")
         
@@ -361,10 +361,17 @@ with right_col:
                     hovertemplate='<b>%{x}</b><br>평균 등급: %{y:.2f}등급<br>이수 학점: %{customdata[0]}학점<extra></extra>',
                     customdata=df_grp[["이수학점"]]
                 )
-                # 등급 그래프이므로 Y축 반전 (1등급이 상단)
+                # X축을 아래쪽(side="bottom")에 고정하여 막대 그래프 아래에 밀착
                 fig_bar.update_layout(
-                    yaxis=dict(autorange="reversed", range=[5.5, 0.5], title="평균 등급 (낮을수록 좋음)"),
-                    xaxis_title="교과군",
+                    xaxis=dict(
+                        title="교과군",
+                        side="bottom"
+                    ),
+                    yaxis=dict(
+                        autorange="reversed", 
+                        range=[5.5, 0.5], 
+                        title="평균 등급 (낮을수록 좋음)"
+                    ),
                     height=350,
                     margin=dict(l=20, r=20, t=50, b=20),
                     showlegend=False
@@ -374,7 +381,7 @@ with right_col:
         st.markdown("---")
 
         # ---------------------------------------------------------
-        # [NEW 2] 학기별/교과군별 성적 변화 추이 꺾은선 그래프
+        # 학기별/교과군별 성적 변화 추이 꺾은선 그래프
         # ---------------------------------------------------------
         st.markdown("### 📈 학기별 성적 변화 추이 그래프")
 

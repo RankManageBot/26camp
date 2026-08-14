@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#6366F1"          # 인디고/보라 계열 포인트
+backgroundColor = "#0F172A"       # 딥 다크 블루 배경
+secondaryBackgroundColor = "#1E293B" # 카드/입력창 배경
+textColor = "#F8FAFC"             # 밝은 흰색 글자
+font = "sans serif"

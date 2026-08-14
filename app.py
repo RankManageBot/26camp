@@ -120,6 +120,9 @@ if "sel_group" not in st.session_state:
 if "ai_report" not in st.session_state:
     st.session_state["ai_report"] = ""
 
+if "recommended_univs" not in st.session_state:
+    st.session_state["recommended_univs"] = ""
+
 if "chat_messages" not in st.session_state:
     st.session_state["chat_messages"] = []
 
@@ -525,7 +528,7 @@ with tab_report:
 
                         subjects_summary_str = df_analysis.to_string(index=False)
 
-                        # 프롬프트 생성 (22개정 강조)
+                        # 1) 전체 리포트용 프롬프트 (추천 대학 포함)
                         prompt = f"""
                         너는 2028 대입 개편안 및 2022 개정 교육과정에 정통한 대한민국 최상위 대입 전문 입시 컨설턴트야.
 
@@ -554,6 +557,21 @@ with tab_report:
                         5. **따뜻한 응원 메시지**: 격려 인사로 마무리.
                         """
 
+                        # 2) 별도 대학 추천 전용 프롬프트
+                        prompt_recommend = f"""
+                        너는 대한민국 최상위 대입 전문 입시 컨설턴트야.
+                        현재 학생의 5등급제 평균 성적({avg_5grade:.2f}등급) 및 이수 현황, 그리고 목표 대학/학과인 [{target_univ}]를 바탕으로,
+                        현재 성적으로 현실적으로 지원 및 합격을 노려볼 수 있는 **다른 대학들의 동일 또는 유사/연관 학과 3~5곳**을 추천해줘.
+
+                        [출력 형식]
+                        - **[안정 지원]** 대학명 - 학과명 (추천 이유 및 2028 내신 관점 조언)
+                        - **[적정/소신 지원]** 대학명 - 학과명 (추천 이유 및 2028 내신 관점 조언)
+                        - **[도전/상향 지원]** 대학명 - 학과명 (추천 이유 및 2028 내신 관점 조언)
+
+                        불필요한 인사말 없이 바로 깔끔한 가독성의 마크다운 구조로 작성해줘.
+                        """
+
+                        # AI 리포트 메인 호출
                         response = client.chat.completions.create(
                             model="solar-pro",
                             messages=[
@@ -566,7 +584,21 @@ with tab_report:
                             temperature=0.7
                         )
 
+                        # AI 대학 추천 호출
+                        response_rec = client.chat.completions.create(
+                            model="solar-pro",
+                            messages=[
+                                {
+                                    "role": "system",
+                                    "content": "너는 2028 대입 전문 입시 컨설턴트야."
+                                },
+                                {"role": "user", "content": prompt_recommend}
+                            ],
+                            temperature=0.7
+                        )
+
                         st.session_state["ai_report"] = response.choices[0].message.content
+                        st.session_state["recommended_univs"] = response_rec.choices[0].message.content
                         st.session_state["chat_messages"] = []
 
                     except Exception as e:
@@ -575,11 +607,12 @@ with tab_report:
         # AI 리포트가 생성되었을 때 인터랙티브 뷰어 출력
         if st.session_state["ai_report"]:
             report_content = st.session_state["ai_report"]
+            rec_content = st.session_state.get("recommended_univs", "")
 
             # 리포트 다운로드 버튼
             st.download_button(
                 label="📄 전체 AI 리포트 (.txt) 다운로드",
-                data=report_content,
+                data=f"=== [지원 가능 대학/학과 추천] ===\n\n{rec_content}\n\n=== [종합 분석 리포트] ===\n\n{report_content}",
                 file_name=f"{st.session_state.get('target_univ', '목표대학')}_2028_입시분석리포트.txt",
                 mime="text/plain",
                 use_container_width=True
@@ -587,7 +620,17 @@ with tab_report:
 
             st.write("")
 
-            with st.expander("📌 AI 종합 입시 분석 리포트", expanded=True):
+            # ---------------------------------------------------------
+            # NEW: 지원 가능 대학/학과 추천 Expander (상단 배치)
+            # ---------------------------------------------------------
+            with st.expander("🏫 **[현재 성적 기반] 지원 가능 타 대학 / 유사 학과 추천**", expanded=True):
+                if rec_content:
+                    st.markdown(rec_content)
+                else:
+                    st.info("리포트를 생성하면 지원 가능한 타 대학 및 유사 학과 추천 정보를 확인할 수 있습니다.")
+
+            # 📌 AI 종합 입시 분석 리포트 Expander
+            with st.expander("📌 **AI 종합 입시 분석 리포트**", expanded=True):
                 st.markdown(report_content)
 
             st.markdown("---")
@@ -618,12 +661,16 @@ with tab_report:
 
 {SCIENCE_22_PROMPT_INFO}
 
-아래는 당신이 학생 성적을 바탕으로 작성했던 2028 대입 분석 리포트 내용이다:
+아래는 당신이 학생 성적을 바탕으로 작성했던 2028 대입 분석 리포트 및 대학 추천 내용이다:
 --------------------------------------------------
+[추천 대학 정보]
+{st.session_state.get('recommended_univs', '')}
+
+[종합 리포트 내용]
 {st.session_state['ai_report']}
 --------------------------------------------------
 
-위 분석 리포트 내용과 학생의 5등급제 성적, 그리고 2022 개정 교육과정을 철저히 기반으로 하여 답변해라. 절대 '물리학Ⅰ', '화학Ⅱ' 등 15개정 과목명을 써서는 안 된다."""
+위 내용과 학생의 5등급제 성적, 그리고 2022 개정 교육과정을 철저히 기반으로 하여 답변해라. 절대 '물리학Ⅰ', '화학Ⅱ' 등 15개정 과목명을 써서는 안 된다."""
 
                             messages_payload = [{"role": "system", "content": system_instruction}]
 

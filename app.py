@@ -594,15 +594,8 @@ with tab_report:
                 st.markdown(report_content)
 
             with rep_tab2:
-                with st.expander("📌 [1] AI 종합 입시 분석 및 리포트 전문", expanded=True):
+                with st.expander("📌 AI 종합 입시 분석 및 리포트 전문", expanded=True):
                     st.markdown(report_content)
-
-                with st.expander("🔬 [2] 2022 개정 과학/수학 과목 이수 체크포인트", expanded=False):
-                    st.info("""
-                    **💡 2022 개정 교육과정 핵심 요약**
-                    - **과학 Ⅰ, Ⅱ 완전 폐지**: '물리학Ⅰ/Ⅱ', '화학Ⅰ/Ⅱ'가 아닌 **'역학과 에너지'**, **'물질과 에너지'**, **'세포와 물질대사'** 등 진로/융합선택 과목으로 개편되었습니다.
-                    - **전공 연계성 중요도 증가**: 지원하려는 전공과 연관된 진로/융합선택 과목을 얼마나 깊이 있게 이수했는지가 세특 및 학종 평가의 핵심 요소가 됩니다.
-                    """)
 
             st.markdown("---")
 

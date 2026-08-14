@@ -191,7 +191,7 @@ with tab_input:
 
         s_col1, s_col2, s_col3, s_col4 = st.columns(4)
         with s_col1:
-            grade = st.number_input("석차등급", min_value=1.0, max_value=5.0, value=2.0, step=0.1, format="%.1f")
+            grade = st.number_input("석차등급", min_value=1.0, max_value=5.0, value=2.0, step=1, format="%.1f")
         with s_col2:
             raw_score = st.number_input("원점수", min_value=0, max_value=100, value=90, step=1)
         with s_col3:

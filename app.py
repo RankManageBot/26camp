@@ -129,9 +129,13 @@ def on_category_change():
     st.session_state["sel_group"] = available_groups[0]
 
 # ---------------------------------------------------------
-# 상단 탭 구성 (성적 입력 / 분석 및 AI 리포트)
+# 상단 탭 구성 (3개 탭으로 분리)
 # ---------------------------------------------------------
-tab_input, tab_analysis = st.tabs(["📝 1. 성적 입력", "📊 2. 환산 분석 및 AI 리포트"])
+tab_input, tab_analysis, tab_report = st.tabs([
+    "📝 1. 성적 입력", 
+    "📊 2. 환산 분석 및 시뮬레이션", 
+    "🤖 3. AI 맞춤 입시 리포트"
+])
 
 
 # =========================================================
@@ -263,7 +267,7 @@ with tab_input:
 
 
 # =========================================================
-# TAB 2: 환산 분석 및 AI 리포트 & 질의응답
+# TAB 2: 환산 분석 및 인터랙티브 시뮬레이션 (2번 탭)
 # =========================================================
 with tab_analysis:
     df_analysis = pd.DataFrame(st.session_state["subjects_data"])
@@ -286,7 +290,7 @@ with tab_analysis:
         estimated_9grade = float(np.interp(avg_5grade, x_5scale, y_9scale))
         estimated_pct = float(np.interp(avg_5grade, x_5scale, pct_scale))
 
-        # 메트릭 카드 UI
+        # 핵심 메트릭 카드 UI
         st.markdown(f"""
         <div class="metric-container">
             <div class="metric-card">
@@ -311,7 +315,31 @@ with tab_analysis:
         st.markdown("---")
 
         # ---------------------------------------------------------
-        # 시각화 그래프 2종 (좌우 2분할)
+        # 인터랙티브 섹션 1: 가상 성적 시뮬레이터 (접이식 Expander)
+        # ---------------------------------------------------------
+        with st.expander("🔮 **[인터랙티브] 다음 학기 성적 변화 시뮬레이터**", expanded=True):
+            st.caption("다음 학기 예상 학점과 평균 등급을 조절해 최종 등급 변화를 실시간으로 확인해보세요.")
+            sim_col1, sim_col2 = st.columns(2)
+            with sim_col1:
+                next_units = st.number_input("다음 학기 이수 예정 학점", min_value=1, max_value=30, value=16, step=1)
+            with sim_col2:
+                next_grade = st.slider("다음 학기 목표 평균 등급", min_value=1.0, max_value=5.0, value=1.5, step=0.1)
+
+            sim_total_units = total_units + next_units
+            sim_avg_grade = ((avg_5grade * total_units) + (next_grade * next_units)) / sim_total_units
+            diff = avg_5grade - sim_avg_grade
+
+            if diff > 0:
+                st.success(f"💡 다음 학기에 **{next_grade:.1f}등급**을 이수할 경우, 전체 평균이 **{avg_5grade:.2f}등급 → {sim_avg_grade:.2f}등급**으로 **{abs(diff):.2f}등급 상승**합니다!")
+            elif diff < 0:
+                st.warning(f"⚠️ 다음 학기에 **{next_grade:.1f}등급**을 이수할 경우, 전체 평균이 **{avg_5grade:.2f}등급 → {sim_avg_grade:.2f}등급**으로 **{abs(diff):.2f}등급 하락**합니다.")
+            else:
+                st.info(f"💡 현재 성적이 그대로 유지됩니다. (최종 평균: {sim_avg_grade:.2f}등급)")
+
+        st.markdown("---")
+
+        # ---------------------------------------------------------
+        # 인터랙티브 섹션 2: 시각화 차트
         # ---------------------------------------------------------
         g_col1, g_col2 = st.columns(2, gap="large")
 
@@ -319,7 +347,7 @@ with tab_analysis:
         with g_col1:
             st.markdown("##### 📊 학기별 교과군 분석")
             selected_sem = st.radio(
-                "학기 선택",
+                "분석할 학기 선택",
                 options=["전체"] + SEMESTERS,
                 horizontal=True,
                 key="radio_sem_analysis"
@@ -356,7 +384,7 @@ with tab_analysis:
                         customdata=df_grp[["이수학점"]]
                     )
                     fig_bar.update_layout(
-                        xaxis=dict(title="교과군", side="bottom"), # X축 아래쪽 밀착
+                        xaxis=dict(title="교과군", side="bottom"),
                         yaxis=dict(autorange="reversed", range=[5.5, 0.5], title="평균 등급"),
                         height=350,
                         margin=dict(l=10, r=10, t=40, b=10),
@@ -415,10 +443,47 @@ with tab_analysis:
         st.markdown("---")
 
         # ---------------------------------------------------------
-        # AI 분석 리포트 생성 섹션 (22개정 완벽 반영 프롬프트 적용)
+        # 인터랙티브 섹션 3: 필터링 & 데이터 다운로드
         # ---------------------------------------------------------
-        st.subheader("🤖 Upstage Solar AI 2028 맞춤 분석 리포트")
+        st.subheader("🔍 교과군별 성적 세부 필터링 및 다운로드")
         
+        all_groups = list(df_analysis["교과군"].unique())
+        selected_groups = st.multiselect(
+            "확인하고 싶은 교과군을 선택하세요:",
+            options=all_groups,
+            default=all_groups
+        )
+
+        filtered_df_display = df_analysis[df_analysis["교과군"].isin(selected_groups)]
+        
+        st.dataframe(
+            filtered_df_display[["학기", "교과구분", "교과군", "과목명", "단위수(학점)", "석차등급(1~5)", "원점수", "성취도", "성취도 분포비율"]],
+            use_container_width=True
+        )
+
+        # CSV 다운로드 기능
+        csv_data = filtered_df_display.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 선택된 과목 성적 CSV 다운로드",
+            data=csv_data,
+            file_name="2028_내신_성적_분석데이터.csv",
+            mime="text/csv"
+        )
+
+
+# =========================================================
+# TAB 3: AI 맞춤 입시 리포트 및 질의응답 (3번 탭)
+# =========================================================
+with tab_report:
+    df_analysis = pd.DataFrame(st.session_state["subjects_data"])
+
+    if df_analysis.empty or df_analysis["단위수(학점)"].sum() == 0:
+        st.info("👈 먼저 **'1. 성적 입력'** 탭에서 성적 정보를 입력한 후 리포트를 생성해보세요.")
+    else:
+        st.subheader("🤖 Upstage Solar AI 2028 맞춤 분석 리포트")
+        st.caption("2022 개정 교육과정 기준과 5등급제 성적 체계를 바탕으로 AI 전문 컨설턴트가 리포트를 발행합니다.")
+
+        # AI 리포트 생성 버튼
         if st.button("✨ AI 분석 리포트 생성 / 다시 생성", type="primary", use_container_width=True):
             if not api_key:
                 st.error("⚠️ API 키가 설정되지 않았습니다.")
@@ -426,6 +491,18 @@ with tab_analysis:
                 with st.spinner("Solar AI가 2022 개정 교육과정 기준에 맞춰 성적표와 이수 현황을 분석 중입니다..."):
                     try:
                         client = OpenAI(api_key=api_key, base_url="https://api.upstage.ai/v1/solar")
+
+                        total_units = int(df_analysis["단위수(학점)"].sum())
+                        weighted_grade_sum = (df_analysis["석차등급(1~5)"] * df_analysis["단위수(학점)"]).sum()
+                        avg_5grade = weighted_grade_sum / total_units
+                        weighted_score_sum = (df_analysis["원점수"] * df_analysis["단위수(학점)"]).sum()
+                        avg_raw_score = weighted_score_sum / total_units
+
+                        x_5scale = [1.0, 1.5, 2.5, 3.5, 4.5, 5.0]
+                        y_9scale = [1.0, 1.9, 3.7, 5.3, 7.5, 9.0]
+                        pct_scale = [0.0, 10.0, 34.0, 66.0, 90.0, 100.0]
+                        estimated_9grade = float(np.interp(avg_5grade, x_5scale, y_9scale))
+                        estimated_pct = float(np.interp(avg_5grade, x_5scale, pct_scale))
 
                         student_type = st.session_state.get("student_type", "고등학교 재학생")
                         target_univ = st.session_state.get("target_univ", "연세대학교 컴퓨터공학과")
@@ -448,7 +525,7 @@ with tab_analysis:
 
                         subjects_summary_str = df_analysis.to_string(index=False)
 
-                        # [핵심] 분석 프롬프트에 22개정 강조
+                        # 프롬프트 생성 (22개정 강조)
                         prompt = f"""
                         너는 2028 대입 개편안 및 2022 개정 교육과정에 정통한 대한민국 최상위 대입 전문 입시 컨설턴트야.
 
@@ -490,42 +567,67 @@ with tab_analysis:
                         )
 
                         st.session_state["ai_report"] = response.choices[0].message.content
-                        st.session_state["chat_messages"] = [] # 대화 내역 초기화
+                        st.session_state["chat_messages"] = []
 
                     except Exception as e:
                         st.error(f"API 호출 중 오류가 발생했습니다: {e}")
 
-        # AI 리포트 출력
+        # AI 리포트가 생성되었을 때 인터랙티브 뷰어 출력
         if st.session_state["ai_report"]:
-            st.markdown(st.session_state["ai_report"])
+            report_content = st.session_state["ai_report"]
+
+            # 리포트 다운로드 버튼
+            st.download_button(
+                label="📄 전체 AI 리포트 (.txt) 다운로드",
+                data=report_content,
+                file_name=f"{st.session_state.get('target_univ', '목표대학')}_2028_입시분석리포트.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+
+            st.write("")
+
+            # 카테고리별 뷰어 (Tabs) + 접이식 섹션 (Expander)
+            rep_tab1, rep_tab2 = st.tabs(["📜 전체 리포트 한눈에 보기", "📂 섹션별 접이식 뷰어"])
+
+            with rep_tab1:
+                st.markdown(report_content)
+
+            with rep_tab2:
+                with st.expander("📌 [1] AI 종합 입시 분석 및 리포트 전문", expanded=True):
+                    st.markdown(report_content)
+
+                with st.expander("🔬 [2] 2022 개정 과학/수학 과목 이수 체크포인트", expanded=False):
+                    st.info("""
+                    **💡 2022 개정 교육과정 핵심 요약**
+                    - **과학 Ⅰ, Ⅱ 완전 폐지**: '물리학Ⅰ/Ⅱ', '화학Ⅰ/Ⅱ'가 아닌 **'역학과 에너지'**, **'물질과 에너지'**, **'세포와 물질대사'** 등 진로/융합선택 과목으로 개편되었습니다.
+                    - **전공 연계성 중요도 증가**: 지원하려는 전공과 연관된 진로/융합선택 과목을 얼마나 깊이 있게 이수했는지가 세특 및 학종 평가의 핵심 요소가 됩니다.
+                    """)
 
             st.markdown("---")
 
             # ---------------------------------------------------------
-            # 하단 AI 입시 컨설턴트 1:1 대화상자 (22개정 강조 반영)
+            # 1:1 추가 질의응답 (Chatbot)
             # ---------------------------------------------------------
             st.subheader("💬 AI 입시 컨설턴트와 1:1 추가 질의응답")
-            st.caption("위 분석 리포트에 대해 궁금한 점이나 추가 입시 전략을 자유롭게 질문해 보세요!")
+            st.caption("발행된 분석 리포트에 대해 궁금한 점이나 추가 세특/학종 전략을 자유롭게 질문하세요.")
 
-            # 기존 메시지 표시
+            # 기존 메시지 출력
             for message in st.session_state["chat_messages"]:
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
 
-            # 사용자 입력 박스
-            if user_query := st.chat_input("예: 수시 학생부종합전형에서 세특을 어떻게 채워야 할까요?"):
-                # 사용자 메시지 화면 출력 및 세션 저장
+            # 질문 입력 박스
+            if user_query := st.chat_input("예: 2022 개정 과학 진로선택 과목에서 세특 주제를 추천해줘."):
                 st.session_state["chat_messages"].append({"role": "user", "content": user_query})
                 with st.chat_message("user"):
                     st.markdown(user_query)
 
-                # AI 답변 생성
                 with st.chat_message("assistant"):
-                    with st.spinner("답변을 작성하고 있습니다..."):
+                    with st.spinner("답변을 작성 중입니다..."):
                         try:
                             client = OpenAI(api_key=api_key, base_url="https://api.upstage.ai/v1/solar")
 
-                            # [핵심] 1:1 질의응답 시스템 프롬프트에도 22개정 강력 주입
                             system_instruction = f"""너는 2028 대입 및 2022 개정 교육과정 전문 대입 컨설턴트야.
 
 {SCIENCE_22_PROMPT_INFO}
@@ -539,7 +641,6 @@ with tab_analysis:
 
                             messages_payload = [{"role": "system", "content": system_instruction}]
 
-                            # 이전 대화 기록 추가
                             for msg in st.session_state["chat_messages"]:
                                 messages_payload.append({"role": msg["role"], "content": msg["content"]})
 

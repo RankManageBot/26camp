@@ -587,15 +587,8 @@ with tab_report:
 
             st.write("")
 
-            # 카테고리별 뷰어 (Tabs) + 접이식 섹션 (Expander)
-            rep_tab1, rep_tab2 = st.tabs(["📜 전체 리포트 한눈에 보기", "📂 섹션별 접이식 뷰어"])
-
-            with rep_tab1:
+            with st.expander("📌 AI 종합 입시 분석 리포트", expanded=True):
                 st.markdown(report_content)
-
-            with rep_tab2:
-                with st.expander("📌 AI 종합 입시 분석 및 리포트 전문", expanded=True):
-                    st.markdown(report_content)
 
             st.markdown("---")
 
